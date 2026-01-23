@@ -23,15 +23,18 @@ import dev.hotwire.navigation.session.SessionModalResult
 import dev.hotwire.navigation.util.HotwireViewScreenshotHolder
 import dev.hotwire.navigation.util.dispatcherProvider
 import dev.hotwire.navigation.views.HotwireView
-import kotlin.random.Random
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.random.Random
 
-/** Provides all the hooks for a web Fragment to delegate its lifecycle events to this class. */
+/** 
+ * Provides all the hooks for a web Fragment to delegate its lifecycle events
+ * to this class.
+ */
 internal class HotwireWebFragmentDelegate(
-        private val delegate: HotwireFragmentDelegate,
-        private val navDestination: HotwireDestination,
-        private val callback: HotwireWebFragmentCallback
+    private val delegate: HotwireFragmentDelegate,
+    private val navDestination: HotwireDestination,
+    private val callback: HotwireWebFragmentCallback
 ) : SessionCallback, VisitDestination {
 
     private val location = navDestination.location
@@ -40,23 +43,25 @@ internal class HotwireWebFragmentDelegate(
     private var isInitialVisit = true
     private var isWebViewAttachedToNewDestination = false
     private val screenshotHolder = HotwireViewScreenshotHolder()
-    private val navigator
-        get() = navDestination.navigator
-    private val session
-        get() = if (navDestination.isModal) navigator.modalSession else navigator.session
-    private val hotwireView
-        get() = callback.hotwireView
-    private val viewTreeLifecycleOwner
-        get() = hotwireView?.findViewTreeLifecycleOwner()
+    private val navigator get() = navDestination.navigator
+    private val session get() = if (navDestination.isModal) navigator.modalSession else navigator.session
+    private val hotwireView get() = callback.hotwireView
+    private val viewTreeLifecycleOwner get() = hotwireView?.findViewTreeLifecycleOwner()
 
-    /** Get the session's WebView instance */
+    /**
+     * Get the session's WebView instance.
+     */
     val webView: HotwireWebView
         get() = session.webView
 
-    /** The activity result launcher that handles file chooser results. */
+    /** 
+     * The activity result launcher that handles file chooser results.
+     */
     val fileChooserResultLauncher = registerFileChooserLauncher()
 
-    /** The activity result launcher that handles geolocation permission results. */
+    /** 
+     * The activity result launcher that handles geolocation permission results.
+     */
     val geoLocationPermissionResultLauncher = registerGeolocationPermissionLauncher()
 
     fun prepareNavigation(onReady: () -> Unit) {
@@ -75,8 +80,8 @@ internal class HotwireWebFragmentDelegate(
     }
 
     /**
-     * Should be called by the implementing Fragment during [androidx.fragment.app.Fragment.onStart]
-     * .
+     * Should be called by the implementing Fragment during
+     * [androidx.fragment.app.Fragment.onStart].
      */
     fun onStart() {
         initNavigationVisit()
@@ -84,8 +89,8 @@ internal class HotwireWebFragmentDelegate(
     }
 
     /**
-     * Provides a hook when a fragment has been started again after receiving a modal result. Will
-     * navigate if the result indicates it should.
+     * Provides a hook when a fragment has been started again after receiving a
+     * modal result. Will navigate if the result indicates it should.
      */
     fun onStartAfterModalResult(result: SessionModalResult) {
         val shouldRoute = navigator.shouldRouteToModalResult(result)
@@ -120,10 +125,7 @@ internal class HotwireWebFragmentDelegate(
      *
      * Note: We intentionally do NOT call session.restoreCurrentVisit() here because
      * that dispatches a native:restore event which triggers all bridge components
-     * to re-connect. This can cause components from cached pages (like a search bar
-     * from the homepage) to incorrectly appear on the current page. Instead, we
-     * manually update the session's callback to ensure future visit proposals are
-     * properly routed to this destination.
+     * to re-connect.
      */
     private fun reattachWebViewAndRestoreWithoutVisit() {
         initView()
@@ -156,7 +158,8 @@ internal class HotwireWebFragmentDelegate(
     }
 
     /**
-     * Provides a hook when the dialog has been canceled. Detaches the WebView before navigation.
+     * Provides a hook when the dialog has been canceled. Detaches the WebView
+     * before navigation.
      */
     fun onDialogCancel() {
         session.removeCallback(this)
@@ -164,7 +167,8 @@ internal class HotwireWebFragmentDelegate(
     }
 
     /**
-     * Provides a hook when the dialog has been dismissed. Detaches the WebView before navigation.
+     * Provides a hook when the dialog has been dismissed. Detaches the WebView
+     * before navigation.
      */
     fun onDialogDismiss() {
         // The WebView is already detached in most circumstances, but sometimes
@@ -188,7 +192,9 @@ internal class HotwireWebFragmentDelegate(
         }
     }
 
-    /** Should be called by the implementing Fragment during [HotwireDestination.refresh]. */
+    /**
+     * Should be called by the implementing Fragment during [HotwireDestination.refresh].
+     */
     fun refresh(displayProgress: Boolean) {
         if (webView.url == null) return
 
@@ -221,9 +227,7 @@ internal class HotwireWebFragmentDelegate(
         return navDestination.activityResultLauncher(requestCode)
     }
 
-    override fun activityPermissionResultLauncher(
-            requestCode: Int
-    ): ActivityResultLauncher<String>? {
+    override fun activityPermissionResultLauncher(requestCode: Int): ActivityResultLauncher<String>? {
         return navDestination.activityPermissionResultLauncher(requestCode)
     }
 
@@ -388,10 +392,9 @@ internal class HotwireWebFragmentDelegate(
 
             // Visit every time the WebView is reattached to the current Fragment.
             if (isWebViewAttachedToNewDestination) {
-                val currentSessionVisitRestored =
-                        !isInitialVisit &&
-                                session.currentVisit?.destinationIdentifier == identifier &&
-                                session.restoreCurrentVisit(this)
+                val currentSessionVisitRestored = !isInitialVisit &&
+                    session.currentVisit?.destinationIdentifier == identifier &&
+                    session.restoreCurrentVisit(this)
 
                 if (!currentSessionVisitRestored) {
                     showProgressView(location)
@@ -412,8 +415,7 @@ internal class HotwireWebFragmentDelegate(
     }
 
     private fun registerFileChooserLauncher(): ActivityResultLauncher<Intent> {
-        return navDestination.fragment.registerForActivityResult(StartActivityForResult()) { result
-            ->
+        return navDestination.fragment.registerForActivityResult(StartActivityForResult()) { result ->
             session.fileChooserDelegate.onActivityResult(result)
         }
     }
@@ -426,30 +428,28 @@ internal class HotwireWebFragmentDelegate(
 
     private fun visit(location: String, restoreWithCachedSnapshot: Boolean, reload: Boolean) {
         val restore = restoreWithCachedSnapshot && !reload
-        val options =
-                when {
-                    restore -> VisitOptions(action = VisitAction.RESTORE)
-                    reload -> VisitOptions()
-                    else -> visitOptions
-                }
+        val options = when {
+            restore -> VisitOptions(action = VisitAction.RESTORE)
+            reload -> VisitOptions()
+            else -> visitOptions
+        }
 
         viewTreeLifecycleOwner?.lifecycleScope?.launch {
-            val snapshot =
-                    when (options.action) {
-                        VisitAction.ADVANCE -> fetchCachedSnapshot()
-                        else -> null
-                    }
+            val snapshot = when (options.action) {
+                VisitAction.ADVANCE -> fetchCachedSnapshot()
+                else -> null
+            }
 
             viewTreeLifecycleOwner?.lifecycle?.withStateAtLeast(STARTED) {
                 session.visit(
-                        Visit(
-                                location = location,
-                                destinationIdentifier = identifier,
-                                restoreWithCachedSnapshot = restoreWithCachedSnapshot,
-                                reload = reload,
-                                callback = this@HotwireWebFragmentDelegate,
-                                options = options.copy(snapshotHTML = snapshot)
-                        )
+                    Visit(
+                        location = location,
+                        destinationIdentifier = identifier,
+                        restoreWithCachedSnapshot = restoreWithCachedSnapshot,
+                        reload = reload,
+                        callback = this@HotwireWebFragmentDelegate,
+                        options = options.copy(snapshotHTML = snapshot)
+                    )
                 )
             }
         }
@@ -457,9 +457,13 @@ internal class HotwireWebFragmentDelegate(
 
     private suspend fun fetchCachedSnapshot(): String? {
         return withContext(dispatcherProvider.io) {
-            val response = Hotwire.config.offlineRequestHandler?.getCachedSnapshot(url = location)
+            val response = Hotwire.config.offlineRequestHandler?.getCachedSnapshot(
+                url = location
+            )
 
-            response?.data?.use { String(it.readBytes()) }
+            response?.data?.use { 
+                String(it.readBytes())
+            }
         }
     }
 
@@ -477,12 +481,16 @@ internal class HotwireWebFragmentDelegate(
     private fun initializePullToRefresh(hotwireView: HotwireView) {
         hotwireView.webViewRefresh?.apply {
             isEnabled = navDestination.pathProperties.pullToRefreshEnabled
-            setOnRefreshListener { refresh(displayProgress = true) }
+            setOnRefreshListener { 
+                refresh(displayProgress = true) 
+            }
         }
     }
 
     private fun initializeErrorPullToRefresh(hotwireView: HotwireView) {
-        hotwireView.errorRefresh?.apply { setOnRefreshListener { refresh(displayProgress = true) } }
+        hotwireView.errorRefresh?.apply { 
+            setOnRefreshListener { refresh(displayProgress = true) } 
+        }
     }
 
     private fun pullToRefreshEnabled(enabled: Boolean) {

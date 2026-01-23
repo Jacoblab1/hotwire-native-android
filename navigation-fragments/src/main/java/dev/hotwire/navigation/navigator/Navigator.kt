@@ -62,8 +62,8 @@ class Navigator(
         get() = navController.previousBackStackEntry?.location
 
     /**
-     * The [Session] instance that is shared with all default context destinations
-     * that are hosted inside this [NavigatorHost].
+     * The [Session] instance that is shared with all destinations that are
+     * hosted inside this [NavigatorHost].
      */
     var session = createSession(forModalContext = false)
         private set
