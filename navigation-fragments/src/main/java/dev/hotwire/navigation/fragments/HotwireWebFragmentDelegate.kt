@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
-/** 
+/**
  * Provides all the hooks for a web Fragment to delegate its lifecycle events
  * to this class.
  */
@@ -49,17 +49,17 @@ internal class HotwireWebFragmentDelegate(
     private val viewTreeLifecycleOwner get() = hotwireView?.findViewTreeLifecycleOwner()
 
     /**
-     * Get the session's WebView instance.
+     * Get the session's WebView instance
      */
     val webView: HotwireWebView
         get() = session.webView
 
-    /** 
+    /**
      * The activity result launcher that handles file chooser results.
      */
     val fileChooserResultLauncher = registerFileChooserLauncher()
 
-    /** 
+    /**
      * The activity result launcher that handles geolocation permission results.
      */
     val geoLocationPermissionResultLauncher = registerGeolocationPermissionLauncher()
@@ -298,7 +298,10 @@ internal class HotwireWebFragmentDelegate(
         callback.onReceivedHttpAuthRequest(handler, host, realm)
     }
 
-    override fun visitProposedToLocation(location: String, options: VisitOptions) {
+    override fun visitProposedToLocation(
+        location: String, 
+        options: VisitOptions
+    ) {
         navigator.route(location, options)
     }
 
@@ -461,7 +464,7 @@ internal class HotwireWebFragmentDelegate(
                 url = location
             )
 
-            response?.data?.use { 
+            response?.data?.use {
                 String(it.readBytes())
             }
         }
@@ -481,15 +484,17 @@ internal class HotwireWebFragmentDelegate(
     private fun initializePullToRefresh(hotwireView: HotwireView) {
         hotwireView.webViewRefresh?.apply {
             isEnabled = navDestination.pathProperties.pullToRefreshEnabled
-            setOnRefreshListener { 
-                refresh(displayProgress = true) 
+            setOnRefreshListener {
+                refresh(displayProgress = true)
             }
         }
     }
 
     private fun initializeErrorPullToRefresh(hotwireView: HotwireView) {
         hotwireView.errorRefresh?.apply { 
-            setOnRefreshListener { refresh(displayProgress = true) } 
+            setOnRefreshListener {
+                refresh(displayProgress = true)
+            } 
         }
     }
 
