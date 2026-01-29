@@ -1,6 +1,7 @@
 package dev.hotwire.navigation.navigator
 
 import android.os.Bundle
+import android.view.ViewGroup
 import androidx.annotation.IdRes
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -229,6 +230,17 @@ class Navigator(
         navigateWhenReady {
             clearAll {
                 session.reset()
+                modalSession.reset()
+
+                // Detach WebViews from any previous view hierarchy so they
+                // can be re-attached to the new start destination fragment
+                // after the navigation graph is rebuilt. Without this, the
+                // WebView's parent still references the old (destroyed)
+                // fragment's container, causing attachWebView() to return
+                // false and preventing the initial visit.
+                (session.webView.parent as? ViewGroup)?.removeView(session.webView)
+                (modalSession.webView.parent as? ViewGroup)?.removeView(modalSession.webView)
+
                 host.initControllerGraph()
 
                 if (host.view == null) {
