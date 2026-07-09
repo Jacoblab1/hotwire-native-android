@@ -3,6 +3,7 @@ package dev.hotwire.navigation.fragments
 import android.content.Intent
 import android.webkit.HttpAuthHandler
 import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.lifecycle.Lifecycle.State.STARTED
@@ -44,7 +45,7 @@ internal class HotwireWebFragmentDelegate(
     private var isWebViewAttachedToNewDestination = false
     private val screenshotHolder = HotwireViewScreenshotHolder()
     private val navigator get() = navDestination.navigator
-    private val session get() = navigator.session
+    private val session get() = if (navDestination.isModal) navigator.modalSession else navigator.session
     private val hotwireView get() = callback.hotwireView
     private val viewTreeLifecycleOwner get() = hotwireView?.findViewTreeLifecycleOwner()
 
@@ -63,6 +64,13 @@ internal class HotwireWebFragmentDelegate(
      * The activity result launcher that handles geolocation permission results.
      */
     val geoLocationPermissionResultLauncher = registerGeolocationPermissionLauncher()
+
+    /**
+     * The activity result launcher that handles WebView-issued
+     * [android.webkit.PermissionRequest]s for media-capture resources
+     * (audio and/or video).
+     */
+    val webViewPermissionResultLauncher = registerWebViewPermissionLauncher()
 
     fun prepareNavigation(onReady: () -> Unit) {
         session.removeCallback(this)
@@ -93,19 +101,50 @@ internal class HotwireWebFragmentDelegate(
      * modal result. Will navigate if the result indicates it should.
      */
     fun onStartAfterModalResult(result: SessionModalResult) {
-        if (!navigator.willRouteToNewDestinationWithModalResult(result)) {
-            initNavigationVisit()
-            initWebChromeClient()
+        val shouldRoute = navigator.shouldRouteToModalResult(result)
+        val willRouteToNewDestination = navigator.willRouteToNewDestinationWithModalResult(result)
+
+        when {
+            willRouteToNewDestination -> {
+                // New destination will handle WebView attachment and visit.
+            }
+            shouldRoute -> {
+                initNavigationVisit()
+                initWebChromeClient()
+            }
+            else -> {
+                reattachWebViewAndRestoreWithoutVisit()
+                initWebChromeClient()
+            }
+        }
+    }
+
+    /**
+     * Reattaches the WebView and restores the current visit state without triggering
+     * a new network request. Used when a modal is dismissed without navigation.
+     *
+     * With separate WebViews for default and modal contexts, the default context's
+     * WebView keeps its content while a modal is displayed. Reattaching it avoids
+     * dispatching native:restore and reconnecting bridge components on the page.
+     */
+    private fun reattachWebViewAndRestoreWithoutVisit() {
+        initView()
+        attachWebView {
+            isWebViewAttachedToNewDestination = it
+
+            if (isWebViewAttachedToNewDestination) {
+                session.currentVisit?.callback = this
+                removeTransitionalViews()
+            }
         }
     }
 
     /**
      * Provides a hook when the fragment has been started again after a dialog has
-     * been dismissed/canceled and no result is passed back. Initializes all necessary views and
-     * executes the visit.
+     * been dismissed/canceled and no result is passed back.
      */
     fun onStartAfterDialogCancel() {
-        initNavigationVisit()
+        reattachWebViewAndRestoreWithoutVisit()
         initWebChromeClient()
     }
 
@@ -139,8 +178,8 @@ internal class HotwireWebFragmentDelegate(
         // Manually cache a snapshot of the WebView when navigating from a
         // web screen to a native screen. This allows a "restore" visit when
         // revisiting this location again.
-        if (navigator.session.currentVisit?.location != navigator.location) {
-            navigator.session.cacheSnapshot()
+        if (session.currentVisit?.location != navigator.location) {
+            session.cacheSnapshot()
         }
     }
 
@@ -181,6 +220,12 @@ internal class HotwireWebFragmentDelegate(
 
     override fun activityPermissionResultLauncher(requestCode: Int): ActivityResultLauncher<String>? {
         return navDestination.activityPermissionResultLauncher(requestCode)
+    }
+
+    override fun activityMultiplePermissionsResultLauncher(
+        requestCode: Int
+    ): ActivityResultLauncher<Array<String>>? {
+        return navDestination.activityMultiplePermissionsResultLauncher(requestCode)
     }
 
     // -----------------------------------------------------------------------
@@ -378,6 +423,12 @@ internal class HotwireWebFragmentDelegate(
     private fun registerGeolocationPermissionLauncher(): ActivityResultLauncher<String> {
         return navDestination.fragment.registerForActivityResult(RequestPermission()) { isGranted ->
             session.geolocationPermissionDelegate.onActivityResult(isGranted)
+        }
+    }
+
+    private fun registerWebViewPermissionLauncher(): ActivityResultLauncher<Array<String>> {
+        return navDestination.fragment.registerForActivityResult(RequestMultiplePermissions()) { results ->
+            session.webViewPermissionDelegate.onActivityResult(results)
         }
     }
 

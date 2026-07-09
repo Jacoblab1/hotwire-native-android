@@ -1,6 +1,7 @@
 package dev.hotwire.navigation.navigator
 
 import android.os.Bundle
+import android.view.ViewGroup
 import androidx.annotation.IdRes
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -13,12 +14,13 @@ import dev.hotwire.core.turbo.nav.PresentationContext
 import dev.hotwire.core.turbo.session.Session
 import dev.hotwire.core.turbo.visit.VisitAction
 import dev.hotwire.core.turbo.visit.VisitOptions
+import dev.hotwire.core.turbo.visit.VisitProposal
 import dev.hotwire.navigation.activities.HotwireActivity
 import dev.hotwire.navigation.config.HotwireNavigation
 import dev.hotwire.navigation.destinations.HotwireDestination
 import dev.hotwire.navigation.destinations.HotwireDestinationAnimations
 import dev.hotwire.navigation.destinations.HotwireDialogDestination
-import dev.hotwire.navigation.logging.logEvent
+import dev.hotwire.navigation.logging.logDebug
 import dev.hotwire.navigation.routing.Router
 import dev.hotwire.navigation.session.SessionModalResult
 import dev.hotwire.navigation.session.SessionViewModel
@@ -65,17 +67,34 @@ class Navigator(
      * The [Session] instance that is shared with all destinations that are
      * hosted inside this [NavigatorHost].
      */
-    var session = createNewSession()
+    var session = createSession(forModalContext = false)
         private set
 
-    internal fun createNewSession() = Session(
-        sessionName = configuration.name,
-        activity = activity,
-        webView = Hotwire.config.makeCustomWebView(activity)
-    ).also {
-        // Initialize bridge with new WebView instance
-        if (HotwireNavigation.registeredBridgeComponentFactories.isNotEmpty()) {
-            Bridge.initialize(it.webView)
+    /**
+     * The [Session] instance that is shared with all modal context destinations
+     * that are hosted inside this [NavigatorHost]. Using a separate session for
+     * modals allows the default context WebView to retain its content while the
+     * modal is displayed.
+     */
+    var modalSession = createSession(forModalContext = true)
+        private set
+
+    internal fun createNewSession() {
+        session = createSession(forModalContext = false)
+        modalSession = createSession(forModalContext = true)
+    }
+
+    private fun createSession(forModalContext: Boolean): Session {
+        val sessionSuffix = if (forModalContext) "-modal" else ""
+        return Session(
+            sessionName = "${configuration.name}$sessionSuffix",
+            activity = activity,
+            webView = Hotwire.config.makeCustomWebView(activity)
+        ).also {
+            // Initialize bridge with new WebView instance
+            if (HotwireNavigation.registeredBridgeComponentFactories.isNotEmpty()) {
+                Bridge.initialize(it.webView)
+            }
         }
     }
 
@@ -138,7 +157,7 @@ class Navigator(
         extras: FragmentNavigator.Extras? = null
     ) {
 
-        if (getRouteDecision(location) == Router.Decision.CANCEL) {
+        if (getRouteDecision(location, options, bundle) == Router.Decision.CANCEL) {
             return
         }
 
@@ -211,7 +230,14 @@ class Navigator(
         navigateWhenReady {
             clearAll {
                 session.reset()
-                host.initControllerGraph()
+                modalSession.reset()
+
+                // Detach WebViews from any previous view hierarchy so they can
+                // be attached after the navigation graph is rebuilt.
+                (session.webView.parent as? ViewGroup)?.removeView(session.webView)
+                (modalSession.webView.parent as? ViewGroup)?.removeView(modalSession.webView)
+
+                host.resetControllerGraph()
 
                 if (host.view == null) {
                     onReset()
@@ -286,11 +312,13 @@ class Navigator(
         )
 
         when (rule.newPresentation) {
-            Presentation.REPLACE -> navigateWhenReady {
+            Presentation.REPLACE -> {
+                currentDestination?.onBeforeNavigation()
                 popBackStack(rule)
                 navigateToLocation(rule)
             }
-            else -> navigateWhenReady {
+            else -> {
+                currentDestination?.onBeforeNavigation()
                 navigateToLocation(rule)
             }
         }
@@ -423,11 +451,22 @@ class Navigator(
         return customNavigator?.navController ?: navController
     }
 
-    private fun getRouteDecision(location: String): Router.Decision {
-        val customDecision = currentDestination?.customRouteDecision(location)
+    private fun getRouteDecision(
+        location: String,
+        options: VisitOptions,
+        bundle: Bundle?
+    ): Router.Decision {
+        val proposal = VisitProposal(
+            location = location,
+            options = options,
+            properties = Hotwire.config.pathConfiguration.properties(location),
+            bundle = bundle
+        )
+
+        val customDecision = currentDestination?.customRouteDecision(proposal)
 
         val decision = customDecision ?: HotwireNavigation.router.decideRoute(
-            location = location,
+            proposal = proposal,
             configuration = configuration,
             activity = activity
         )
@@ -471,6 +510,6 @@ class Navigator(
             add(0, "navigator" to configuration.name)
             add("currentFragment" to (destinationName ?: "NONE"))
         }
-        logEvent(event, attributes)
+        logDebug(event, attributes)
     }
 }

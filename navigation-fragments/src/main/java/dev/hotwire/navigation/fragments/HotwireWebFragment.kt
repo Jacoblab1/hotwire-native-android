@@ -13,6 +13,7 @@ import dev.hotwire.core.bridge.BridgeComponentFragmentLifecycle
 import dev.hotwire.core.bridge.BridgeDelegate
 import dev.hotwire.core.files.util.HOTWIRE_REQUEST_CODE_FILES
 import dev.hotwire.core.files.util.HOTWIRE_REQUEST_CODE_GEOLOCATION_PERMISSION
+import dev.hotwire.core.files.util.HOTWIRE_REQUEST_CODE_WEBVIEW_PERMISSION
 import dev.hotwire.core.turbo.errors.VisitError
 import dev.hotwire.core.turbo.webview.HotwireWebChromeClient
 import dev.hotwire.core.turbo.webview.HotwireWebView
@@ -118,6 +119,15 @@ open class HotwireWebFragment : HotwireFragment(), HotwireWebFragmentCallback {
         }
     }
 
+    override fun activityMultiplePermissionsResultLauncher(
+        requestCode: Int
+    ): ActivityResultLauncher<Array<String>>? {
+        return when (requestCode) {
+            HOTWIRE_REQUEST_CODE_WEBVIEW_PERMISSION -> webDelegate.webViewPermissionResultLauncher
+            else -> null
+        }
+    }
+
     override fun onBridgeComponentInitialized(component: BridgeComponent<*>) {
         super.onBridgeComponentInitialized(component)
 
@@ -170,7 +180,8 @@ open class HotwireWebFragment : HotwireFragment(), HotwireWebFragmentCallback {
     }
 
     override fun createWebChromeClient(): HotwireWebChromeClient {
-        return HotwireWebChromeClient(navigator.session)
+        val session = if (isModal) navigator.modalSession else navigator.session
+        return HotwireWebChromeClient(session)
     }
 
     override fun onVisitErrorReceived(location: String, error: VisitError) {

@@ -1,23 +1,17 @@
 package dev.hotwire.navigation.destinations
 
 import android.content.Intent
-import android.os.Bundle
 import androidx.activity.result.ActivityResultLauncher
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import androidx.navigation.NavOptions
-import androidx.navigation.navOptions
 import dev.hotwire.core.bridge.BridgeDestination
 import dev.hotwire.core.config.Hotwire
 import dev.hotwire.core.turbo.config.PathConfigurationProperties
 import dev.hotwire.core.turbo.config.context
-import dev.hotwire.core.turbo.config.presentation
-import dev.hotwire.core.turbo.nav.Presentation
 import dev.hotwire.core.turbo.nav.PresentationContext
 import dev.hotwire.core.turbo.visit.VisitAction
-import dev.hotwire.navigation.R
-import dev.hotwire.navigation.activities.HotwireActivity
-import dev.hotwire.navigation.config.HotwireNavigation
+import dev.hotwire.core.turbo.visit.VisitProposal
 import dev.hotwire.navigation.fragments.HotwireFragmentDelegate
 import dev.hotwire.navigation.fragments.HotwireFragmentViewModel
 import dev.hotwire.navigation.navigator.Navigator
@@ -122,7 +116,7 @@ interface HotwireDestination : BridgeDestination {
      * Return `null` to use the global [Router.RouteDecisionHandler] instances to determine
      * routing logic.
      */
-    fun customRouteDecision(newLocation: String): Router.Decision? {
+    fun customRouteDecision(proposal: VisitProposal): Router.Decision? {
         return null
     }
 
@@ -170,9 +164,27 @@ interface HotwireDestination : BridgeDestination {
         return null
     }
 
+    /**
+     * Gets a registered `ActivityResultContracts.RequestMultiplePermissions` activity result
+     * launcher instance for the given `requestCode`.
+     *
+     * Override to provide your own [androidx.activity.result.ActivityResultLauncher]
+     * instances. If your app doesn't have a matching `requestCode`, you must call
+     * `super.activityMultiplePermissionsResultLauncher(requestCode)` to give the
+     * library an opportunity to provide a matching result launcher.
+     *
+     * @param requestCode The request code for the corresponding result launcher.
+     */
+    fun activityMultiplePermissionsResultLauncher(
+        requestCode: Int
+    ): ActivityResultLauncher<Array<String>>? {
+        return null
+    }
+
     fun prepareNavigation(onReady: () -> Unit)
 
     override fun bridgeWebViewIsReady(): Boolean {
-        return navigator.session.isReady
+        val session = if (isModal) navigator.modalSession else navigator.session
+        return session.isReady
     }
 }
