@@ -1,6 +1,7 @@
 package dev.hotwire.navigation.navigator
 
 import android.os.Bundle
+import android.view.ViewGroup
 import androidx.annotation.IdRes
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -66,17 +67,34 @@ class Navigator(
      * The [Session] instance that is shared with all destinations that are
      * hosted inside this [NavigatorHost].
      */
-    var session = createNewSession()
+    var session = createSession(forModalContext = false)
         private set
 
-    internal fun createNewSession() = Session(
-        sessionName = configuration.name,
-        activity = activity,
-        webView = Hotwire.config.makeCustomWebView(activity)
-    ).also {
-        // Initialize bridge with new WebView instance
-        if (HotwireNavigation.registeredBridgeComponentFactories.isNotEmpty()) {
-            Bridge.initialize(it.webView)
+    /**
+     * The [Session] instance that is shared with all modal context destinations
+     * that are hosted inside this [NavigatorHost]. Using a separate session for
+     * modals allows the default context WebView to retain its content while the
+     * modal is displayed.
+     */
+    var modalSession = createSession(forModalContext = true)
+        private set
+
+    internal fun createNewSession() {
+        session = createSession(forModalContext = false)
+        modalSession = createSession(forModalContext = true)
+    }
+
+    private fun createSession(forModalContext: Boolean): Session {
+        val sessionSuffix = if (forModalContext) "-modal" else ""
+        return Session(
+            sessionName = "${configuration.name}$sessionSuffix",
+            activity = activity,
+            webView = Hotwire.config.makeCustomWebView(activity)
+        ).also {
+            // Initialize bridge with new WebView instance
+            if (HotwireNavigation.registeredBridgeComponentFactories.isNotEmpty()) {
+                Bridge.initialize(it.webView)
+            }
         }
     }
 
@@ -212,6 +230,13 @@ class Navigator(
         navigateWhenReady {
             clearAll {
                 session.reset()
+                modalSession.reset()
+
+                // Detach WebViews from any previous view hierarchy so they can
+                // be attached after the navigation graph is rebuilt.
+                (session.webView.parent as? ViewGroup)?.removeView(session.webView)
+                (modalSession.webView.parent as? ViewGroup)?.removeView(modalSession.webView)
+
                 host.resetControllerGraph()
 
                 if (host.view == null) {
@@ -287,11 +312,13 @@ class Navigator(
         )
 
         when (rule.newPresentation) {
-            Presentation.REPLACE -> navigateWhenReady {
+            Presentation.REPLACE -> {
+                currentDestination?.onBeforeNavigation()
                 popBackStack(rule)
                 navigateToLocation(rule)
             }
-            else -> navigateWhenReady {
+            else -> {
+                currentDestination?.onBeforeNavigation()
                 navigateToLocation(rule)
             }
         }

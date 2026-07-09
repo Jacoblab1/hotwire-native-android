@@ -131,7 +131,10 @@ class HotwireActivityDelegate(val activity: HotwireActivity) {
     fun resetSessions() {
         navigatorHosts.values
             .filter { it.isGraphInitialized }
-            .forEach { it.navigator.session.reset() }
+            .forEach {
+                it.navigator.session.reset()
+                it.navigator.modalSession.reset()
+            }
     }
 
     /**
