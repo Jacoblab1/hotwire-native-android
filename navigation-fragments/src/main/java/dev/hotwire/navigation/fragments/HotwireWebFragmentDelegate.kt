@@ -45,7 +45,7 @@ internal class HotwireWebFragmentDelegate(
     private var isWebViewAttachedToNewDestination = false
     private val screenshotHolder = HotwireViewScreenshotHolder()
     private val navigator get() = navDestination.navigator
-    private val session get() = navigator.session
+    private val session get() = if (navDestination.isModal) navigator.modalSession else navigator.session
     private val hotwireView get() = callback.hotwireView
     private val viewTreeLifecycleOwner get() = hotwireView?.findViewTreeLifecycleOwner()
 
@@ -101,19 +101,50 @@ internal class HotwireWebFragmentDelegate(
      * modal result. Will navigate if the result indicates it should.
      */
     fun onStartAfterModalResult(result: SessionModalResult) {
-        if (!navigator.willRouteToNewDestinationWithModalResult(result)) {
-            initNavigationVisit()
-            initWebChromeClient()
+        val shouldRoute = navigator.shouldRouteToModalResult(result)
+        val willRouteToNewDestination = navigator.willRouteToNewDestinationWithModalResult(result)
+
+        when {
+            willRouteToNewDestination -> {
+                // New destination will handle WebView attachment and visit.
+            }
+            shouldRoute -> {
+                initNavigationVisit()
+                initWebChromeClient()
+            }
+            else -> {
+                reattachWebViewAndRestoreWithoutVisit()
+                initWebChromeClient()
+            }
+        }
+    }
+
+    /**
+     * Reattaches the WebView and restores the current visit state without triggering
+     * a new network request. Used when a modal is dismissed without navigation.
+     *
+     * With separate WebViews for default and modal contexts, the default context's
+     * WebView keeps its content while a modal is displayed. Reattaching it avoids
+     * dispatching native:restore and reconnecting bridge components on the page.
+     */
+    private fun reattachWebViewAndRestoreWithoutVisit() {
+        initView()
+        attachWebView {
+            isWebViewAttachedToNewDestination = it
+
+            if (isWebViewAttachedToNewDestination) {
+                session.currentVisit?.callback = this
+                removeTransitionalViews()
+            }
         }
     }
 
     /**
      * Provides a hook when the fragment has been started again after a dialog has
-     * been dismissed/canceled and no result is passed back. Initializes all necessary views and
-     * executes the visit.
+     * been dismissed/canceled and no result is passed back.
      */
     fun onStartAfterDialogCancel() {
-        initNavigationVisit()
+        reattachWebViewAndRestoreWithoutVisit()
         initWebChromeClient()
     }
 
@@ -147,8 +178,8 @@ internal class HotwireWebFragmentDelegate(
         // Manually cache a snapshot of the WebView when navigating from a
         // web screen to a native screen. This allows a "restore" visit when
         // revisiting this location again.
-        if (navigator.session.currentVisit?.location != navigator.location) {
-            navigator.session.cacheSnapshot()
+        if (session.currentVisit?.location != navigator.location) {
+            session.cacheSnapshot()
         }
     }
 
