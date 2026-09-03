@@ -102,6 +102,11 @@ class HotwireBottomNavigationController(
     /**
      * Load the tabs and their navigator configurations into the [BottomNavigationView].
      *
+     * If the app calls `activity.delegate.holdStartLocations()` before calling this, the
+     * initially selected tab is not loaded here — no tab visits its start location until
+     * `activity.delegate.releaseStartLocations()` is called. The tab is still selected and
+     * remembered as the current navigator in the meantime.
+     *
      * @param tabs The list of [HotwireBottomTab] instances that correspond to the
      *  [BottomNavigationView] tabs.
      * @param selectedTabIndex The index of the initially selected tab.

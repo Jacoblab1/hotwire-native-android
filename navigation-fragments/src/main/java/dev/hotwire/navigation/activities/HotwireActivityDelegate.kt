@@ -18,6 +18,7 @@ import dev.hotwire.navigation.observers.HotwireActivityObserver
 class HotwireActivityDelegate(val activity: HotwireActivity) {
     private val navigatorHosts = mutableMapOf<Int, NavigatorHost>()
     private val lazyNavigatorHostIds = mutableSetOf<Int>()
+    private var holdingStartLocations = false
 
     private val onBackPressedCallback = object : OnBackPressedCallback(enabled = true) {
         override fun handleOnBackPressed() {
@@ -57,6 +58,12 @@ class HotwireActivityDelegate(val activity: HotwireActivity) {
 
 
     /**
+     * True while start locations are being held back. See [holdStartLocations].
+     */
+    val isHoldingStartLocations: Boolean
+        get() = holdingStartLocations
+
+    /**
      * Sets the currently active navigator in your Activity. If you use multiple
      *  [NavigatorHost] instances in your app (such as for bottom tabs),
      *  you must update this whenever the current navigator changes.
@@ -67,9 +74,53 @@ class HotwireActivityDelegate(val activity: HotwireActivity) {
 
         val navigatorHost = navigatorHosts[currentNavigatorHostId]
         if (navigatorHost != null) {
-            navigatorHost.initControllerGraphIfNeeded()
+            if (!holdingStartLocations) {
+                navigatorHost.initControllerGraphIfNeeded()
+            }
             updateOnBackPressedCallback(navigatorHost)
         }
+    }
+
+    /**
+     * Prevents every registered and future [NavigatorHost] from building its navigation
+     * graph and visiting its start location until [releaseStartLocations] is called. Use
+     * this when the app isn't ready to make its first visit yet (e.g. while an async
+     * authentication bootstrap is in flight).
+     *
+     * Must be called before the hosts' views are created and they register themselves
+     * with this delegate. In practice that means in `Activity.onCreate()`, before
+     * `setContentView()` and before `HotwireBottomNavigationController.load()`, and at
+     * the latest before the Activity is started. A host that has already registered has
+     * booted its start location, and this won't undo that.
+     */
+    fun holdStartLocations() {
+        logDebug("startLocationsHeld", listOf("navigator" to "all"))
+        holdingStartLocations = true
+    }
+
+    /**
+     * Lifts the hold started by [holdStartLocations]. Boots the start location of every
+     * host that would have been booted on registration had the hold not been in place:
+     * hosts that aren't lazy, plus the current host. Hosts that register afterwards
+     * behave normally.
+     *
+     * Call this while the Activity is resumed (or at least started with its fragment
+     * state not yet saved). `FragmentNavigator` silently drops the navigate to the start
+     * destination when `FragmentManager.isStateSaved` is true, and the host is marked as
+     * initialized either way, so releasing while stopped leaves the host with a
+     * navigation graph but no start fragment.
+     *
+     * This is idempotent and is a no-op when nothing is being held.
+     */
+    fun releaseStartLocations() {
+        if (!holdingStartLocations) return
+
+        logDebug("startLocationsReleased", listOf("navigator" to "all"))
+        holdingStartLocations = false
+
+        navigatorHosts.values
+            .filter { it.id !in lazyNavigatorHostIds || it.id == currentNavigatorHostId }
+            .forEach { it.initControllerGraphIfNeeded() }
     }
 
     /**
@@ -94,10 +145,12 @@ class HotwireActivityDelegate(val activity: HotwireActivity) {
                 updateOnBackPressedCallback(host)
             }
 
-            // Load the host's start destination unless it's a lazy host that
-            // isn't currently selected. Lazy hosts are loaded when they first
-            // become the current navigator.
-            if (host.id !in lazyNavigatorHostIds || currentNavigatorHostId == host.id) {
+            // Load the host's start destination unless start locations are being
+            // held back, or it's a lazy host that isn't currently selected. Lazy
+            // hosts are loaded when they first become the current navigator.
+            if (!holdingStartLocations &&
+                (host.id !in lazyNavigatorHostIds || currentNavigatorHostId == host.id)
+            ) {
                 host.initControllerGraphIfNeeded()
             }
         }
